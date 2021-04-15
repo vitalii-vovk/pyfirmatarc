@@ -1,0 +1,7 @@
+*.pyc
+*.pyd
+**/__pycache__
+**/.vscode
+
+project_files
+**/test_reports
