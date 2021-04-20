@@ -10,7 +10,7 @@ import time
 
 
 @dataclass
-class Configuration:
+class RcConfig:
     channels: int = 0
     framelen: int = 0
     minpulse: int = 0
@@ -25,13 +25,13 @@ class RcChannel:
 
 
 class RC_CHANNEL(IntEnum):
-        ROLL = 0
-        PITCH = 1
-        THROTTLE = 2
-        YAW = 3
-        ARM = 4
-        RESERVED1 = 5
-        RESERVED2 = 6
+    ROLL = 0
+    PITCH = 1
+    THROTTLE = 2
+    YAW = 3
+    ARM = 4
+    RESERVED1 = 5
+    RESERVED2 = 6
 
 
 class FirmataRC(Arduino):
@@ -42,12 +42,15 @@ class FirmataRC(Arduino):
         super().__init__(*args, **kwargs)
 
         self._logger = logging.getLogger('firmatarc')
-        self._conf = Configuration()
+        self._conf = RcConfig()
         self._channels = dict()
         self._req_queue = dict()
 
         self._setup_handlers()
         self.reset()
+
+    def __del__(self):
+        self.release()
 
     def _setup_handlers(self):
         self.add_cmd_handler(RC_CMD.TX_CFG_READ, self._get_conf_handler)
@@ -74,9 +77,9 @@ class FirmataRC(Arduino):
 
     def _set_conf_handler(self, *data):
         result = data[0]
-        is_ok = self._check_status(RC_CMD.TF_CFG_WRITE, result)
+        is_ok = self._check_status(RC_CMD.TX_CFG_WRITE, result)
 
-        self._task_done(RC_CMD.TF_CFG_WRITE)
+        self._task_done(RC_CMD.TX_CFG_WRITE)
         return is_ok
 
     def _get_conf_handler(self, *data):
@@ -195,7 +198,7 @@ class FirmataRC(Arduino):
         for k, v in self._req_queue:
             self._wait_cmd(k, 1)
 
-    def send(self, cmd, data, block=False):
+    def send(self, cmd, data, block: bool = False):
         val = self._task_sched(cmd)
         self.send_sysex(cmd, data)
         if block:
@@ -204,14 +207,18 @@ class FirmataRC(Arduino):
     def reset(self):
         msg = MsgCreator.rst_msg()
         self.send(msg[0], msg[1:], block=True)
+
         msg = MsgCreator.ptt_msg(1)
         self.send(msg[0], msg[1:], block=True)
-        msg = MsgCreator.get_conf_msg()
-        self.send(msg[0], msg[1:], block=True)
-        msg = MsgCreator.get_all_channels_msg()
-        self.send(msg[0], msg[1:], block=True)
-        self.roll = 255
-        self.send(msg[0], msg[1:], block=True)
+
+        conf = self.get_config()
+        conf.minpulse = 570
+        conf.maxpulse = 1565
+        self.set_config(conf, block=True)
+
+    def release(self):
+        msg = MsgCreator.ptt_msg(0)
+        self.send(msg[0], msg[1:], block=False)
 
     def get_channel(self, ch):
         if ch < 0 or ch >= self._conf.channels:
@@ -226,7 +233,7 @@ class FirmataRC(Arduino):
         self.send(msg[0], msg[1:], block=True)
         return self._channels[ch].value
 
-    def set_channel(self, ch, value):
+    def set_channel(self, ch, value, block: bool = False):
         if ch < 0 or ch >= self._conf.channels:
             return FirmataRC.ERROR.INVALID_CHANNEL
 
@@ -236,22 +243,27 @@ class FirmataRC(Arduino):
             self._channels[ch].status = False
 
         msg = MsgCreator.set_channel_msg(ch, value)
-        self.send(msg[0], msg[1:])
+        self.send(msg[0], msg[1:], block=block)
 
-    def set_throttle(self, value):
-        return self.set_channel(RC_CHANNEL.THROTTLE, value)
+    def set_throttle(self, value, block: bool = True):
+        return self.set_channel(RC_CHANNEL.THROTTLE, value, block=block)
 
-    def set_roll(self, value):
-        return self.set_channel(RC_CHANNEL.ROLL, value)
+    def set_roll(self, value, block: bool = True):
+        return self.set_channel(RC_CHANNEL.ROLL, value, block=block)
 
-    def set_pitch(self, value):
-        return self.set_channel(RC_CHANNEL.PITCH, value)
+    def set_pitch(self, value, block: bool = True):
+        return self.set_channel(RC_CHANNEL.PITCH, value, block=block)
 
-    def set_yaw(self, value):
-        return self.set_channel(RC_CHANNEL.YAW, value)
+    def set_yaw(self, value, block: bool = True):
+        return self.set_channel(RC_CHANNEL.YAW, value, block=block)
 
-    def set_arm(self, value):
-        return self.set_channel(RC_CHANNEL.ARM, value)
+    def set_arm(self, value, block: bool = True):
+        return self.set_channel(RC_CHANNEL.ARM, value, block=block)
+
+    def set_config(self, conf: RcConfig, block: bool = True):
+        msg = MsgCreator.set_conf_msg(
+            conf.channels, conf.minpulse, conf.maxpulse, conf.framelen)
+        self.send(msg[0], msg[1:], block=block)
 
     def get_throttle(self):
         return self.get_channel(RC_CHANNEL.THROTTLE)
@@ -267,6 +279,11 @@ class FirmataRC(Arduino):
 
     def get_arm(self):
         return self.get_channel(RC_CHANNEL.ARM)
+
+    def get_config(self):
+        msg = MsgCreator.get_conf_msg()
+        self.send(msg[0], msg[1:], block=True)
+        return self._conf
 
     # // Property section
     # //// Getters
@@ -294,6 +311,10 @@ class FirmataRC(Arduino):
     @property
     def arm(self):
         return self.get_arm()
+
+    @property
+    def config(self):
+        return self.get_config()
 
     # //// Setters
 

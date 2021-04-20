@@ -31,8 +31,9 @@ class FirmataRCGetRangesTestCase(unittest.TestCase):
     def test_throttle_range(self):
         from firmatarc import FirmataRC
         board = FirmataRC(FirmataRC.AUTODETECT)
-        while True:
-            print(f'throttle : {board.throttle}')
+        for i in range(300):
+            board.throttle = i
+            print(f'throttle {i}: {board.throttle}')
             time.sleep(0.1)
 
     @unittest.skipIf(testcase != TestCase.GET_ROLL_RANGE, "Turned off the blocking test untill it is really needed")
