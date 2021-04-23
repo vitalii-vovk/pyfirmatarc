@@ -205,12 +205,6 @@ class FirmataRC(Arduino):
             self._wait_cmd(cmd, val)
 
     def reset(self):
-        msg = MsgCreator.rst_msg()
-        self.send(msg[0], msg[1:], block=True)
-
-        msg = MsgCreator.ptt_msg(1)
-        self.send(msg[0], msg[1:], block=True)
-
         conf = self.get_config()
         conf.minpulse = 570
         conf.maxpulse = 1565
@@ -263,6 +257,8 @@ class FirmataRC(Arduino):
     def set_config(self, conf: RcConfig, block: bool = True):
         msg = MsgCreator.set_conf_msg(
             conf.channels, conf.minpulse, conf.maxpulse, conf.framelen)
+        self.send(msg[0], msg[1:], block=False)
+        msg = MsgCreator.rst_msg()
         self.send(msg[0], msg[1:], block=block)
 
     def get_throttle(self):
